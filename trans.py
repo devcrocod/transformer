@@ -6,7 +6,6 @@ import torch.nn as nn
 from torch.nn.parameter import Parameter
 
 
-
 class LayerNorm(nn.Module):
     """Construct a layernorm module in the OpenAI style (epsilon inside the square root)."""
 
@@ -60,8 +59,7 @@ class Attention(nn.Module):
         self.register_buffer('b', torch.tril(torch.ones(n_ctx, n_ctx)).view(1, 1, n_ctx, n_ctx))
         self.n_head = cfg.n_head
         self.split_size = n_state
-        self_scale = scale
-        # self.c_attn = nn.Conv1d()
+        self.scale = scale
         self.c_attn = Conv1D(n_state * 3, 1, nx)
         self.c_proj = Conv1D(n_state, 1, nx)
         self.attn_dropout = nn.Dropout(cfg.attn_pdrop)
@@ -156,3 +154,39 @@ class Transformer(nn.Module):
         for block in self.h:
             h = block(h)
         return h
+
+
+class LHead(nn.Module):
+    """ Language Model """
+
+    def __init__(self, model, cfg, trunc_and_reshape=True):
+        super(LHead, self).__init__()
+        self.n_embd = cfg.n_embd
+        embed_shape = model.embed.weight.shape
+        self.decoder = nn.Linear(embed_shape[1], embed_shape[0], bidas=False)
+        self.decoder.weight = model.embed.weight
+        self.trunc_and_reshape = trunc_and_reshape
+
+    def forward(self, h):
+        h_trunc = h[:, :-1].contiguous().view(-1, self.n_embd) \
+            if self.trunc_and_reshape else h
+        lm_logits = self.decoder(h_trunc)
+        return lm_logits
+
+
+class dotdict(dict):
+    __getattr__ = dict.get
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
+
+
+DEFAULT_CONFIG = dotdict({
+    'n_embd': 768,
+    'n_head': 12,
+    'n_layer': 12,
+    'embd_pdrop': 0.1,
+    'attn_pdrop': 0.1,
+    'resid_pdrop': 0.1,
+    'afn': 'gelu',
+    'clf_pdrop': 0.1
+})
