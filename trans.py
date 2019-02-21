@@ -3,6 +3,7 @@ import math
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
 
@@ -156,14 +157,14 @@ class Transformer(nn.Module):
         return h
 
 
-class LHead(nn.Module):
+class LMHead(nn.Module):
     """ Language Model """
 
     def __init__(self, model, cfg, trunc_and_reshape=True):
-        super(LHead, self).__init__()
+        super(LMHead, self).__init__()
         self.n_embd = cfg.n_embd
         embed_shape = model.embed.weight.shape
-        self.decoder = nn.Linear(embed_shape[1], embed_shape[0], bidas=False)
+        self.decoder = nn.Linear(embed_shape[1], embed_shape[0], bias=False)
         self.decoder.weight = model.embed.weight
         self.trunc_and_reshape = trunc_and_reshape
 
@@ -174,19 +175,20 @@ class LHead(nn.Module):
         return lm_logits
 
 
-class dotdict(dict):
-    __getattr__ = dict.get
-    __setattr__ = dict.__setitem__
-    __delattr__ = dict.__delitem__
+class Model(nn.Module):
+    def __init__(self, cfg, vocab=40000, n_ctx=512, return_prob=False):
+        super(Model, self).__init__()
+        self.transformer = Transformer(cfg, vocab=vocab, n_ctx=n_ctx)
+        self.lm_head = LMHead(self.transformer, cfg, trunc_and_reshape=False)
+        self.return_prob = return_prob
+        if self.return_prob:
+            pos_emb_m = torch.zeros(1, 1, vocab)
+            pos_emb_m[:, :, -n_ctx] = -1e12
+            self.register_buffer('pos_emb_m', pos_emb_m)
 
-
-DEFAULT_CONFIG = dotdict({
-    'n_embd': 768,
-    'n_head': 12,
-    'n_layer': 12,
-    'embd_pdrop': 0.1,
-    'attn_pdrop': 0.1,
-    'resid_pdrop': 0.1,
-    'afn': 'gelu',
-    'clf_pdrop': 0.1
-})
+    def forward(self, x):
+        h = self.transformer(x)
+        lm_logits = self.lm_head(h)
+        if self.return_prob:
+            lm_logits = F.softmax(lm_logits + self.pos_emb_m, dim=-1)
+        return lm_logits

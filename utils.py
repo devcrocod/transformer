@@ -21,7 +21,6 @@ def encode(*splits, encoder):
 
 
 def stsb_label_encoding(labels, nclass=6):
-    """Label encoding from Tree LSTM paper (Tai, Socher, Manning)"""
     Y = np.zeros((len(labels), nclass)).astype(np.float32)
     for j, y in enumerate(labels):
         for i in range(nclass):

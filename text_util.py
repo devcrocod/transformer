@@ -7,10 +7,7 @@ from tqdm import tqdm
 
 
 def get_pairs(word):
-    """
-    Return set of symbol pairs in a word.
-    word is represented as tuple of symbols (symbols being variable-length strings)
-    """
+    """ Return set of symbol pairs in a word. """
     pairs = set()
     prev_char = word[0]
     for char in word[1:]:
@@ -20,10 +17,7 @@ def get_pairs(word):
 
 
 def text_standardize(text):
-    """
-    fixes some issues the spacy tokenizer had on books corpus
-    also does some whitespace standardization
-    """
+    """ pre-processing text """
     text = text.replace('—', '-')
     text = text.replace('–', '-')
     text = text.replace('―', '-')
@@ -36,9 +30,6 @@ def text_standardize(text):
 
 
 class TextEncoder(object):
-    """
-    mostly a wrapper for a public python bpe tokenizer
-    """
 
     def __init__(self, encoder_path, bpe_path):
         self.nlp = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
