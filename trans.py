@@ -52,19 +52,19 @@ class Conv1D(nn.Module):
 class Attention(nn.Module):
     """Main class Attention"""
 
-    def __init__(self, nx, n_ctx, cfg, scale=False):
+    def __init__(self, nx, n_ctx, scale=False):
         super(Attention, self).__init__()
         n_state = nx
         # tensor2tensor
-        assert n_state % cfg.n_hed == 0
+        assert n_state % 12 == 0
         self.register_buffer('b', torch.tril(torch.ones(n_ctx, n_ctx)).view(1, 1, n_ctx, n_ctx))
-        self.n_head = cfg.n_head
+        self.n_head = 12
         self.split_size = n_state
         self.scale = scale
         self.c_attn = Conv1D(n_state * 3, 1, nx)
         self.c_proj = Conv1D(n_state, 1, nx)
-        self.attn_dropout = nn.Dropout(cfg.attn_pdrop)
-        self.resid_dropout = nn.Dropout(cfg.resid_pdrop)
+        self.attn_dropout = nn.Dropout(0.1)
+        self.resid_dropout = nn.Dropout(0.1)
 
     def _attn(self, q, k, v):
         w = torch.matmul(q, k)
@@ -103,13 +103,13 @@ class Attention(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, n_state, cfg):  # 768 or 1024?
+    def __init__(self, n_state):  # 768 or 1024?
         super(MLP, self).__init__()
-        nx = cfg.n_embd
+        nx = 768
         self.c_fc = Conv1D(n_state, 1, nx)
         self.c_proj = Conv1D(nx, 1, n_state)
         self.act = nn.ReLU
-        self.dropout = nn.Dropout(cfg.resid_pdrop)
+        self.dropout = nn.Dropout(0.1)
 
     def forward(self, x):
         h = self.act(self.c_fc(x))
@@ -118,12 +118,12 @@ class MLP(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, n_ctx, cfg, scale=False):
+    def __init__(self, n_ctx, scale=False):
         super(Block, self).__init__()
-        nx = cfg.n_embd
-        self.attn = Attention(nx, n_ctx, cfg, scale)
+        nx = 768
+        self.attn = Attention(nx, n_ctx, scale)
         self.ln_1 = LayerNorm(nx)
-        self.mlp = MLP(4 * nx, cfg)
+        self.mlp = MLP(4 * nx)
         self.ln_2 = LayerNorm(nx)
 
     def forward(self, x):
@@ -137,13 +137,13 @@ class Block(nn.Module):
 class Transformer(nn.Module):
     """Transformer openAI"""
 
-    def __init__(self, cfg, vocab=10_000, n_ctx=512):
+    def __init__(self, vocab=10_000, n_ctx=512):
         super(Transformer, self).__init__()
         self.vocab = vocab
-        self.embed = nn.Embedding(vocab, cfg.n_embd)
-        self.drop = nn.Dropout(cfg.embd_pdrop)
-        block = Block(n_ctx, cfg, scale=True)
-        self.h = nn.ModuleList([copy.deepcopy(block) for _ in range(cfg.n_layer)])
+        self.embed = nn.Embedding(vocab, 768)
+        self.drop = nn.Dropout(0.1)
+        block = Block(n_ctx, scale=True)
+        self.h = nn.ModuleList([copy.deepcopy(block) for _ in range(12)])
 
         nn.init.normal_(self.embed.weight, std=0.02)
 
@@ -160,9 +160,9 @@ class Transformer(nn.Module):
 class LMHead(nn.Module):
     """ Language Model """
 
-    def __init__(self, model, cfg, trunc_and_reshape=True):
+    def __init__(self, model, trunc_and_reshape=True):
         super(LMHead, self).__init__()
-        self.n_embd = cfg.n_embd
+        self.n_embd = 768
         embed_shape = model.embed.weight.shape
         self.decoder = nn.Linear(embed_shape[1], embed_shape[0], bias=False)
         self.decoder.weight = model.embed.weight
@@ -176,10 +176,10 @@ class LMHead(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, cfg, vocab=40000, n_ctx=512, return_prob=False):
+    def __init__(self, vocab=40000, n_ctx=512, return_prob=False):
         super(Model, self).__init__()
-        self.transformer = Transformer(cfg, vocab=vocab, n_ctx=n_ctx)
-        self.lm_head = LMHead(self.transformer, cfg, trunc_and_reshape=False)
+        self.transformer = Transformer(vocab=vocab, n_ctx=n_ctx)
+        self.lm_head = LMHead(self.transformer, trunc_and_reshape=False)
         self.return_prob = return_prob
         if self.return_prob:
             pos_emb_m = torch.zeros(1, 1, vocab)
